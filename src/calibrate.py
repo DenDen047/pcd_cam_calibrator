@@ -1,10 +1,13 @@
-import cv2 as cv
-import numpy as np
 import os
+import numpy as np
+import matplotlib.pyplot as plt
+import cv2 as cv
 import open3d
 import pickle
+from pprint import pprint
+
 from utils import natural_sort, load_pickle
-import matplotlib.pyplot as plt
+
 
 def pick_2d_points(image_path):
     """
@@ -18,22 +21,22 @@ def pick_2d_points(image_path):
     ----
     image_path: string
                 The absolute file path of an image to be picked from
-    """    
+    """
     def click_event(event, x, y, flags, params):
         """
         Callback function for left moust button clicks on the image
         """
         if event == cv.EVENT_LBUTTONDOWN:
-    
+
             print([x,y])
-            cv.drawMarker(img, (x, y),(0,0,255), markerType=cv.MARKER_CROSS, 
+            cv.drawMarker(img, (x, y),(0,0,255), markerType=cv.MARKER_CROSS,
                 markerSize=40, thickness=2, line_type=cv.LINE_AA)
             cv.imshow("image", img)
             img_pts.append([x,y])
-            
+
     img = cv.imread(image_path, 1)
     img_pts = []
- 
+
     cv.imshow('image', img)
     cv.setMouseCallback('image', click_event, img)
     cv.waitKey(0)
@@ -71,10 +74,11 @@ def pick_3d_points(pcd_path):
         point = [1000*a.points[i][1], 1000*a.points[i][2], 1000*a.points[i][0]]
         print(point)
         obj_pts.append(point)
-    
+
     return obj_pts
 
-def calibrate_intrisics(im_folder, pcd_folder, image_type=".png"):
+
+def calibrate_intrisics(im_folder, pcd_folder, image_type=".png", random_selection=None):
     """
     Makes use of OpenCV's camera calibration functions to calibrate based on picked points
 
@@ -96,21 +100,31 @@ def calibrate_intrisics(im_folder, pcd_folder, image_type=".png"):
                 The absolute folder path of pcds to be picked from
     image_type: string
                 The image file extension - png by default
-    
+    random_selection: int
+                If not None, the function will randomly select the number of images and PCDs to be used for calibration
+
     """
 
     # get lists of absolute image and pcd filepaths
     images = natural_sort([os.path.join(im_folder, im) for im in os.listdir(im_folder) if image_type in im])
-    print(images)
     pcds = natural_sort([os.path.join(pcd_folder, pcd) for pcd in os.listdir(pcd_folder) if ".pcd" in pcd])
-    print(pcds)
+    assert len(images) == len(pcds), "Number of images and pcd files do not match"
+
+    if random_selection is not None and random_selection < len(images):
+        # randomly select images and pcd files
+        rng = np.random.default_rng()
+        indices = sorted(rng.choice(len(images), size=random_selection, replace=False))
+        images = [images[i] for i in indices]
+        pcds = [pcds[i] for i in indices]
+    pprint(images)
+    pprint(pcds)
 
     all_obj_pts = []
     all_img_pts = []
     for im in images:
         img_mat = pick_2d_points(im)
         all_img_pts.append(img_mat)
-    
+
     for pcd in pcds:
         obj_mat = pick_3d_points(pcd)
         all_obj_pts.append(obj_mat)
@@ -143,7 +157,7 @@ def calibrate_intrisics(im_folder, pcd_folder, image_type=".png"):
     print(t)
 
     points_dict = {"image": all_img_pts_m, "object": all_obj_pts_m}
-    
+
     with open(r"./results/calib.pickle", "wb") as output_file:
         pickle.dump((k, d, r, t, ret), output_file)
 
@@ -151,6 +165,7 @@ def calibrate_intrisics(im_folder, pcd_folder, image_type=".png"):
         pickle.dump((points_dict), output_file)
 
     return k, d, r, t
+
 
 def reproject_world_points(pcd_path, image_path, cam_matrix, d, image_type=".png"):
     """
@@ -205,6 +220,7 @@ def reproject_world_points(pcd_path, image_path, cam_matrix, d, image_type=".png
 
     return(0)
 
+
 def reproject_points_file(calib_filepath = "./results/5m/calib.pickle", points_filepath = "./results/5m/points.pickle"):
     """
     Calculates reprojection errors from points file
@@ -235,7 +251,7 @@ def reproject_points_file(calib_filepath = "./results/5m/calib.pickle", points_f
             norm_dist = np.sqrt( abs((img_pts_projected[j][0][0]-img_pts_actual[j][0]) * (img_pts_projected[j][0][1]-img_pts_actual[j][1]) ))
             print(norm_dist)
             tot+=norm_dist
-        
+
         err = tot/(len(img_pts_actual))
         print(err)
         err_arr.append(err)
@@ -246,19 +262,22 @@ def reproject_points_file(calib_filepath = "./results/5m/calib.pickle", points_f
 
 
 if __name__ == "__main__":
-    im_folder = "./data/images"
-    pcd_folder = "./data/pcd"
-    mat = load_pickle(r"./results/5m/calib.pickle")
-    matrix_calib = [   [ -22000,  0.00000000e+00, 1200],
-        [ 0.00000000e+00,  -22000, -100],
-        [ 0.00000000e+00,  0.00000000e+00,  1.00000000e+00]]
-    ds = [ 0.06734681, -0.0479633,  -0.01882605,  0.10849954, -0.00990272]
+    data_folder = "/Users/ikuta/Documents/data/WildPose/Calibration/ecal_meas/2023-02-04_15-35-57.407_wildpose_v1.1/"
+    im_folder = os.path.join(data_folder, "sync_rgb")
+    pcd_folder =  os.path.join(data_folder, "lidar")
+    # mat = load_pickle(r"./results/5m/calib.pickle")
+    # matrix_calib = [
+    #     [ -22000,  0.00000000e+00, 1200],
+    #     [ 0.00000000e+00,  -22000, -100],
+    #     [ 0.00000000e+00,  0.00000000e+00,  1.00000000e+00]
+    # ]
+    # ds = [ 0.06734681, -0.0479633,  -0.01882605,  0.10849954, -0.00990272]
 
-    print("matrix")
-    print(mat[0])
-    print("dist")
-    print(mat[1])
+    # print("matrix")
+    # print(mat[0])
+    # print("dist")
+    # print(mat[1])
 
-    #reproject_world_points(pcd_folder, im_folder, newmat, mat[1], image_type=".png")
-    #calibrate_intrisics(im_folder, pcd_folder, image_type = ".jpg")
-    reproject_points_file()
+    # reproject_world_points(pcd_folder, im_folder, newmat, mat[1], image_type=".jpeg")
+    calibrate_intrisics(im_folder, pcd_folder, image_type=".jpeg", random_selection=5)
+    # reproject_points_file()
