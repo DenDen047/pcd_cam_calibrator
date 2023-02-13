@@ -12,6 +12,7 @@ from utils import natural_sort, load_pickle
 def pick_2d_points(image_path):
     """
     Opens a GUI to pick 2d coordinates in an image file
+    Bug: could not open the OpenCV window on M1 Mac (macOS 13.2)
 
     Returns:
     img_points: 3-D array
@@ -27,7 +28,6 @@ def pick_2d_points(image_path):
         Callback function for left moust button clicks on the image
         """
         if event == cv.EVENT_LBUTTONDOWN:
-
             print([x,y])
             cv.drawMarker(img, (x, y),(0,0,255), markerType=cv.MARKER_CROSS,
                 markerSize=40, thickness=2, line_type=cv.LINE_AA)
@@ -146,7 +146,14 @@ def calibrate_intrisics(im_folder, pcd_folder, image_type=".png", random_selecti
         [0, 0, 1]
     ], dtype=np.float32)
 
-    ret, k, d, r, t = cv.calibrateCamera(all_obj_pts_m, all_img_pts_m, first_im_gray.shape[::-1], intrinsic_guess, None, flags=cv.CALIB_USE_INTRINSIC_GUESS)
+    ret, k, d, r, t = cv.calibrateCamera(
+        all_obj_pts_m,
+        all_img_pts_m,
+        first_im_gray.shape[::-1],
+        intrinsic_guess,
+        None,
+        flags=cv.CALIB_USE_INTRINSIC_GUESS
+    )
     print("Calibration matrix")
     print(k)
     print("Distortion Coeffs")
