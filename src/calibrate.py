@@ -4,7 +4,9 @@ import matplotlib.pyplot as plt
 import cv2 as cv
 import open3d
 import pickle
+import glob
 from pprint import pprint
+from typing import List
 
 from utils import natural_sort, load_pickle
 
@@ -28,11 +30,11 @@ def pick_2d_points(image_path):
         Callback function for left moust button clicks on the image
         """
         if event == cv.EVENT_LBUTTONDOWN:
-            print([x,y])
-            cv.drawMarker(img, (x, y),(0,0,255), markerType=cv.MARKER_CROSS,
-                markerSize=40, thickness=2, line_type=cv.LINE_AA)
+            print([x, y])
+            cv.drawMarker(img, (x, y), (0, 0, 255), markerType=cv.MARKER_CROSS,
+                          markerSize=40, thickness=2, line_type=cv.LINE_AA)
             cv.imshow("image", img)
-            img_pts.append([x,y])
+            img_pts.append([x, y])
 
     img = cv.imread(image_path, 1)
     img_pts = []
@@ -43,6 +45,7 @@ def pick_2d_points(image_path):
     cv.destroyAllWindows()
 
     return img_pts
+
 
 def pick_3d_points(pcd_path):
     """
@@ -59,7 +62,7 @@ def pick_3d_points(pcd_path):
 
     """
     a = open3d.io.read_point_cloud(pcd_path)
-    #print(a.points["rgb"].values)
+    # print(a.points["rgb"].values)
 
     vis = open3d.visualization.VisualizerWithEditing()
     vis.create_window()
@@ -70,7 +73,7 @@ def pick_3d_points(pcd_path):
     print(vis.get_picked_points())
     obj_pts = []
     for i in vis.get_picked_points():
-        #print(a.points[i])
+        # print(a.points[i])
         point = [1000*a.points[i][1], 1000*a.points[i][2], 1000*a.points[i][0]]
         print(point)
         obj_pts.append(point)
@@ -78,7 +81,7 @@ def pick_3d_points(pcd_path):
     return obj_pts
 
 
-def calibrate_intrisics(im_folder, pcd_folder, image_type=".png", random_selection=None):
+def calibrate_intrisics(im_folder, pcd_folder, image_type="png", random_selection=None):
     """
     Makes use of OpenCV's camera calibration functions to calibrate based on picked points
 
@@ -106,14 +109,17 @@ def calibrate_intrisics(im_folder, pcd_folder, image_type=".png", random_selecti
     """
 
     # get lists of absolute image and pcd filepaths
-    images = natural_sort([os.path.join(im_folder, im) for im in os.listdir(im_folder) if image_type in im])
-    pcds = natural_sort([os.path.join(pcd_folder, pcd) for pcd in os.listdir(pcd_folder) if ".pcd" in pcd])
-    assert len(images) == len(pcds), "Number of images and pcd files do not match"
+    images = natural_sort(
+        glob.glob(os.path.join(im_folder, f"*.{image_type}")))
+    pcds = natural_sort(glob.glob(os.path.join(pcd_folder, "*.pcd")))
+    assert len(images) == len(
+        pcds), f"Number of images({len(images)}) and pcd files({len(pcds)}) do not match"
 
     if random_selection is not None and random_selection < len(images):
         # randomly select images and pcd files
         rng = np.random.default_rng()
-        indices = sorted(rng.choice(len(images), size=random_selection, replace=False))
+        indices = sorted(rng.choice(
+            len(images), size=random_selection, replace=False))
         images = [images[i] for i in indices]
         pcds = [pcds[i] for i in indices]
     pprint(images)
@@ -193,12 +199,14 @@ def reproject_world_points(pcd_path, image_path, cam_matrix, d, image_type=".png
     d:          1x5 Numpy array
                 The calculated distortion coefficients of the camera
     """
-    images = natural_sort([os.path.join(image_path, im) for im in os.listdir(image_path) if image_type in im])
+    images = natural_sort([os.path.join(image_path, im)
+                          for im in os.listdir(image_path) if image_type in im])
     print(images)
-    pcds = natural_sort([os.path.join(pcd_path, pcd) for pcd in os.listdir(pcd_path) if ".pcd" in pcd])
+    pcds = natural_sort([os.path.join(pcd_path, pcd)
+                        for pcd in os.listdir(pcd_path) if ".pcd" in pcd])
     print(pcds)
 
-    all_obj_pts=[]
+    all_obj_pts = []
 
     for pcd in pcds:
         obj_mat = pick_3d_points(pcd)
@@ -209,12 +217,13 @@ def reproject_world_points(pcd_path, image_path, cam_matrix, d, image_type=".png
         print("Object Points:")
         print(all_obj_pts_m)
 
-        rvec = tvec = (0,0,0)
+        rvec = tvec = (0, 0, 0)
 
         cam_matrix_m = np.asarray(cam_matrix)
         d_m = np.asarray(d)
 
-        img_pts = cv.projectPoints(all_obj_pts_m, rvec, tvec, cam_matrix_m, d_m)
+        img_pts = cv.projectPoints(
+            all_obj_pts_m, rvec, tvec, cam_matrix_m, d_m)
         print(img_pts[0])
 
         image_fp = images[0]
@@ -225,10 +234,10 @@ def reproject_world_points(pcd_path, image_path, cam_matrix, d, image_type=".png
             plt.scatter(pt[0][0], pt[0][1])
         plt.show()
 
-    return(0)
+    return (0)
 
 
-def reproject_points_file(calib_filepath = "./results/5m/calib.pickle", points_filepath = "./results/5m/points.pickle"):
+def reproject_points_file(calib_filepath="./results/5m/calib.pickle", points_filepath="./results/5m/points.pickle"):
     """
     Calculates reprojection errors from points file
     """
@@ -245,9 +254,10 @@ def reproject_points_file(calib_filepath = "./results/5m/calib.pickle", points_f
 
     err_arr = []
 
-    for i,obj in enumerate(obj_pts):
-        rvec = tvec = (0,0,0)
-        img_pts_projected = cv.projectPoints(obj, rvec, tvec, newmat, mat[1])[0]
+    for i, obj in enumerate(obj_pts):
+        rvec = tvec = (0, 0, 0)
+        img_pts_projected = cv.projectPoints(
+            obj, rvec, tvec, newmat, mat[1])[0]
         img_pts_actual = img_pts[i]
         print("Projected:")
         print(img_pts_projected)
@@ -255,9 +265,10 @@ def reproject_points_file(calib_filepath = "./results/5m/calib.pickle", points_f
         print(img_pts_actual)
         tot = 0
         for j in range(len(img_pts_actual)):
-            norm_dist = np.sqrt( abs((img_pts_projected[j][0][0]-img_pts_actual[j][0]) * (img_pts_projected[j][0][1]-img_pts_actual[j][1]) ))
+            norm_dist = np.sqrt(abs((img_pts_projected[j][0][0]-img_pts_actual[j][0]) * (
+                img_pts_projected[j][0][1]-img_pts_actual[j][1])))
             print(norm_dist)
-            tot+=norm_dist
+            tot += norm_dist
 
         err = tot/(len(img_pts_actual))
         print(err)
@@ -271,7 +282,7 @@ def reproject_points_file(calib_filepath = "./results/5m/calib.pickle", points_f
 if __name__ == "__main__":
     data_folder = "/Users/ikuta/Documents/data/WildPose/Calibration/ecal_meas/2023-02-04_15-35-57.407_wildpose_v1.1/"
     im_folder = os.path.join(data_folder, "sync_rgb")
-    pcd_folder =  os.path.join(data_folder, "lidar")
+    pcd_folder = os.path.join(data_folder, "lidar")
     # mat = load_pickle(r"./results/5m/calib.pickle")
     # matrix_calib = [
     #     [ -22000,  0.00000000e+00, 1200],
@@ -286,5 +297,6 @@ if __name__ == "__main__":
     # print(mat[1])
 
     # reproject_world_points(pcd_folder, im_folder, newmat, mat[1], image_type=".jpeg")
-    calibrate_intrisics(im_folder, pcd_folder, image_type=".jpeg", random_selection=5)
+    calibrate_intrisics(im_folder, pcd_folder,
+                        image_type="jpeg", random_selection=5)
     # reproject_points_file()
