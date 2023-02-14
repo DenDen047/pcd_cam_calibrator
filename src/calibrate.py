@@ -114,31 +114,31 @@ def calibrate_intrisics(im_folder, pcd_folder, result_folder, image_type="png", 
     """
 
     # get lists of absolute image and pcd filepaths
-    images = natural_sort(
+    image_fpaths = natural_sort(
         glob.glob(os.path.join(im_folder, f"*.{image_type}")))
-    pcds = natural_sort(glob.glob(os.path.join(pcd_folder, "*.pcd")))
-    assert len(images) == len(
-        pcds), f"Number of images({len(images)}) and pcd files({len(pcds)}) do not match"
+    pcd_fpaths = natural_sort(glob.glob(os.path.join(pcd_folder, "*.pcd")))
+    assert len(image_fpaths) == len(
+        pcd_fpaths), f"Number of images({len(image_fpaths)}) and pcd files({len(pcd_fpaths)}) do not match"
 
-    if random_selection is not None and random_selection < len(images):
+    if random_selection is not None and random_selection < len(image_fpaths):
         # randomly select images and pcd files
         rng = np.random.default_rng()
         indices = sorted(rng.choice(
-            len(images), size=random_selection, replace=False))
-        images = [images[i] for i in indices]
-        pcds = [pcds[i] for i in indices]
+            len(image_fpaths), size=random_selection, replace=False))
+        image_fpaths = [image_fpaths[i] for i in indices]
+        pcd_fpaths = [pcd_fpaths[i] for i in indices]
 
     all_img_pts = []
-    for im in images:
+    for im in image_fpaths:
         img_mat = pick_2d_points(im)
         all_img_pts.append(img_mat)
 
     all_obj_pts = []
-    for pcd in pcds:
+    for pcd in pcd_fpaths:
         obj_mat = pick_3d_points(pcd)
         all_obj_pts.append(obj_mat)
 
-    first_im = cv.imread(images[0])
+    first_im = cv.imread(image_fpaths[0])
     first_im_gray = cv.cvtColor(first_im, cv.COLOR_BGR2GRAY)
 
     all_img_pts_m = np.asarray(all_img_pts, dtype=np.float32)
@@ -172,16 +172,20 @@ def calibrate_intrisics(im_folder, pcd_folder, result_folder, image_type="png", 
     print("t vecs")
     print(t)
 
-    points_dict = {
-        "image": all_img_pts_m,
-        "object": all_obj_pts_m
-    }
-
     with open(os.path.join(result_folder, "calib.pickle"), "wb") as f:
         pickle.dump((k, d, r, t, ret), f)
 
     with open(os.path.join(result_folder, "points.pickle"), "wb") as f:
-        pickle.dump((points_dict), f)
+        pickle.dump({
+            "image": all_img_pts_m,
+            "object": all_obj_pts_m
+        }, f)
+
+    with open(os.path.join(result_folder, "data.pickle"), "wb") as f:
+        pickle.dump({
+            "img_fpaths": image_fpaths,
+            "pcd_fpaths": pcd_fpaths,
+        }, f)
 
     return k, d, r, t
 
@@ -252,6 +256,10 @@ def reproject_points_file(calib_folder: str):
     img_pts = points["image"]
     obj_pts = points["object"]
 
+    tmp = load_pickle(os.path.join(calib_folder, 'data.pickle'))
+    img_fpaths = tmp["img_fpaths"]
+    pcd_fpaths = tmp["pcd_fpaths"]
+
     newmat = mat[0]
     newmat[0][0] = -20000
     newmat[1][1] = -20000
@@ -265,9 +273,9 @@ def reproject_points_file(calib_folder: str):
         img_pts_projected = cv.projectPoints(
             obj, rvec, tvec, newmat, mat[1])[0]
         img_pts_actual = img_pts[i]
-        print('Projected: ', end='')
+        print('Projected: ')
         pprint(img_pts_projected)
-        print('Actual: ', end='')
+        print('Actual: ')
         pprint(img_pts_actual)
         tot = 0
         for j in range(len(img_pts_actual)):
@@ -281,9 +289,22 @@ def reproject_points_file(calib_folder: str):
         pprint(err)
         err_arr.append(err)
 
+        # visualize
+        print('Visualization')
+        pprint(img_pts_projected.shape)  # (n_corner, n_data, xy)
+        img_pts_projected = np.swapaxes(
+            img_pts_projected, 0, 1)    # (n_data, n_corner, xy)
+
+        im = cv.imread(img_fpaths[i], 1)
+        plt.imshow(im)
+        for pt in img_pts_projected[0]:
+            print(pt)
+            plt.scatter(pt[0], pt[1])
+        plt.show()
+
     pprint(err_arr)
-    pprint(np.mean(err_arr))
-    pprint(np.std(err_arr))
+    pprint(f'mean_error: {np.mean(err_arr)}')
+    pprint(f'std_error: {np.std(err_arr)}')
 
 
 if __name__ == "__main__":
